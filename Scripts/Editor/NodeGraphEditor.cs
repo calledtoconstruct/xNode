@@ -15,7 +15,13 @@ namespace XNodeEditor {
         /// <summary> Are we currently renaming a node? </summary>
         protected bool isRenaming;
 
-        public virtual void OnGUI() { }
+        public virtual void OnGUI() {
+            window.DrawConnections();
+            window.DrawDraggedConnection();
+            window.DrawNodes();
+            window.DrawSelectionBox();
+            window.DrawTooltip();
+        }
 
         /// <summary> Called when opened by NodeEditorWindow </summary>
         public virtual void OnOpen() { }

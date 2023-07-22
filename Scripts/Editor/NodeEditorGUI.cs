@@ -28,11 +28,11 @@ namespace XNodeEditor {
             Controls();
 
             DrawGrid(position, zoom, panOffset);
-            DrawConnections();
-            DrawDraggedConnection();
-            DrawNodes();
-            DrawSelectionBox();
-            DrawTooltip();
+            // DrawConnections();
+            // DrawDraggedConnection();
+            // DrawNodes();
+            // DrawSelectionBox();
+            // DrawTooltip();
             graphEditor.OnGUI();
 
             // Run and reset onLateGUI
@@ -64,7 +64,7 @@ namespace XNodeEditor {
             GUI.matrix = Matrix4x4.TRS(offset, Quaternion.identity, Vector3.one);
         }
 
-        public void DrawGrid(Rect rect, float zoom, Vector2 panOffset) {
+        internal void DrawGrid(Rect rect, float zoom, Vector2 panOffset) {
 
             rect.position = Vector2.zero;
 
@@ -89,7 +89,7 @@ namespace XNodeEditor {
             GUI.DrawTextureWithTexCoords(rect, crossTex, new Rect(tileOffset + new Vector2(0.5f, 0.5f), tileAmount));
         }
 
-        public void DrawSelectionBox() {
+        internal void DrawSelectionBox() {
             if (currentActivity == NodeActivity.DragGrid) {
                 Vector2 curPos = WindowToGridPosition(Event.current.mousePosition);
                 Vector2 size = curPos - dragBoxStart;
@@ -154,7 +154,7 @@ namespace XNodeEditor {
         }
 
         /// <summary> Draw a bezier from output to input in grid coordinates </summary>
-        public void DrawNoodle(Gradient gradient, NoodlePath path, NoodleStroke stroke, float thickness, List<Vector2> gridPoints) {
+        internal void DrawNoodle(Gradient gradient, NoodlePath path, NoodleStroke stroke, float thickness, List<Vector2> gridPoints) {
             // convert grid points to window points
             for (int i = 0; i < gridPoints.Count; ++i)
                 gridPoints[i] = GridToWindowPosition(gridPoints[i]);
@@ -327,7 +327,7 @@ namespace XNodeEditor {
         }
 
         /// <summary> Draws all connections </summary>
-        public void DrawConnections() {
+        internal void DrawConnections() {
             Vector2 mousePos = Event.current.mousePosition;
             List<RerouteReference> selection = preBoxSelectionReroute != null ? new List<RerouteReference>(preBoxSelectionReroute) : new List<RerouteReference>();
             hoveredReroute = new RerouteReference();
@@ -397,7 +397,7 @@ namespace XNodeEditor {
             if (Event.current.type != EventType.Layout && currentActivity == NodeActivity.DragGrid) selectedReroutes = selection;
         }
 
-        private void DrawNodes() {
+        internal void DrawNodes() {
             Event e = Event.current;
             if (e.type == EventType.Layout) {
                 selectionCache = new List<UnityEngine.Object>(Selection.objects);
@@ -569,7 +569,7 @@ namespace XNodeEditor {
             return false;
         }
 
-        private void DrawTooltip() {
+        internal void DrawTooltip() {
             if (!NodeEditorPreferences.GetSettings().portTooltips || graphEditor == null)
                 return;
             string tooltip = null;
