@@ -37,7 +37,7 @@ namespace XNodeEditor {
         [NonSerialized] private List<Vector2> draggedOutputReroutes = new List<Vector2>();
 
         private RerouteReference hoveredReroute = new RerouteReference();
-        public List<RerouteReference> selectedReroutes = new List<RerouteReference>();
+        public readonly List<RerouteReference> selectedReroutes = new List<RerouteReference>();
         private Vector2 dragBoxStart;
         private UnityEngine.Object[] preBoxSelection;
         private RerouteReference[] preBoxSelectionReroute;
@@ -196,7 +196,8 @@ namespace XNodeEditor {
                                 if (e.control || e.shift) selectedReroutes.Add(hoveredReroute);
                                 // Select it
                                 else {
-                                    selectedReroutes = new List<RerouteReference>() { hoveredReroute };
+                                    selectedReroutes.Clear();
+                                    selectedReroutes.Add(hoveredReroute);
                                     Selection.activeObject = null;
                                 }
 
@@ -251,8 +252,8 @@ namespace XNodeEditor {
                         } else if (!IsHoveringNode) {
                             // If click outside node, release field focus
                             if (!isPanning) {
-                                EditorGUI.FocusTextInControl(null);
-                                EditorGUIUtility.editingTextField = false;
+                                // EditorGUI.FocusTextInControl(null);
+                                // EditorGUIUtility.editingTextField = false;
                             }
                             if (NodeEditorPreferences.GetSettings().autoSave) AssetDatabase.SaveAssets();
                         }
@@ -271,7 +272,8 @@ namespace XNodeEditor {
 
                         // If click reroute, select it.
                         if (IsHoveringReroute && !(e.control || e.shift)) {
-                            selectedReroutes = new List<RerouteReference>() { hoveredReroute };
+                            selectedReroutes.Clear();
+                            selectedReroutes.Add(hoveredReroute);
                             Selection.activeObject = null;
                         }
 
@@ -391,12 +393,20 @@ namespace XNodeEditor {
             }
         }
 
+        private class DescendingRerouteComparer : IComparer<RerouteReference> {
+            public int Compare(RerouteReference red, RerouteReference green) {
+                return green.pointIndex.CompareTo(red);
+            }
+        }
+
+        private static readonly DescendingRerouteComparer descendingRerouteComparer = new DescendingRerouteComparer();
+
         /// <summary> Remove nodes in the graph in Selection.objects</summary>
         public void RemoveSelectedNodes() {
             // We need to delete reroutes starting at the highest point index to avoid shifting indices
-            selectedReroutes = selectedReroutes.OrderByDescending(x => x.pointIndex).ToList();
-            for (int i = 0; i < selectedReroutes.Count; i++) {
-                selectedReroutes[i].RemovePoint();
+            selectedReroutes.Sort(descendingRerouteComparer);
+            foreach (var selectedReroute in selectedReroutes) {
+                selectedReroute.RemovePoint();
             }
             selectedReroutes.Clear();
             foreach (UnityEngine.Object item in Selection.objects) {

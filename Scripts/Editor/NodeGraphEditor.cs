@@ -15,12 +15,20 @@ namespace XNodeEditor {
         /// <summary> Are we currently renaming a node? </summary>
         protected bool isRenaming;
 
+        protected bool wasPanning;
+
         public virtual void OnGUI() {
             window.DrawConnections();
             window.DrawDraggedConnection();
             window.DrawNodes();
             window.DrawSelectionBox();
             window.DrawTooltip();
+
+            if (wasPanning && !NodeEditorWindow.isPanning) {
+                window.DrawConnections();
+            }
+
+            wasPanning = NodeEditorWindow.isPanning;
         }
 
         /// <summary> Called when opened by NodeEditorWindow </summary>

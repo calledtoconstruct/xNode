@@ -12,8 +12,8 @@ namespace XNodeEditor {
     /// <summary> Contains GUI methods </summary>
     public partial class NodeEditorWindow {
         public NodeGraphEditor graphEditor;
-        private List<UnityEngine.Object> selectionCache;
-        private List<XNode.Node> culledNodes;
+        private readonly List<UnityEngine.Object> selectionCache = new List<UnityEngine.Object>();
+        private readonly List<XNode.Node> culledNodes = new List<XNode.Node>();
         /// <summary> 19 if docked, 22 if not </summary>
         private int topPadding { get { return isDocked() ? 19 : 22; } }
         /// <summary> Executed after all other window GUI. Useful if Zoom is ruining your day. Automatically resets after being run.</summary>
@@ -64,6 +64,9 @@ namespace XNodeEditor {
             GUI.matrix = Matrix4x4.TRS(offset, Quaternion.identity, Vector3.one);
         }
 
+        private readonly Vector2 pointFiveOffset = new Vector2(0.5f, 0.5f);
+        private Rect tileRect = new Rect();
+
         internal void DrawGrid(Rect rect, float zoom, Vector2 panOffset) {
 
             rect.position = Vector2.zero;
@@ -76,18 +79,24 @@ namespace XNodeEditor {
             float xOffset = -(center.x * zoom + panOffset.x) / gridTex.width;
             float yOffset = ((center.y - rect.size.y) * zoom + panOffset.y) / gridTex.height;
 
-            Vector2 tileOffset = new Vector2(xOffset, yOffset);
-
             // Amount of tiles
             float tileAmountX = Mathf.Round(rect.size.x * zoom) / gridTex.width;
             float tileAmountY = Mathf.Round(rect.size.y * zoom) / gridTex.height;
 
-            Vector2 tileAmount = new Vector2(tileAmountX, tileAmountY);
-
             // Draw tiled background
-            GUI.DrawTextureWithTexCoords(rect, gridTex, new Rect(tileOffset, tileAmount));
-            GUI.DrawTextureWithTexCoords(rect, crossTex, new Rect(tileOffset + new Vector2(0.5f, 0.5f), tileAmount));
+            tileRect.xMin = xOffset;
+            tileRect.yMin = yOffset;
+            tileRect.xMax = xOffset + tileAmountX;
+            tileRect.yMax = yOffset + tileAmountY;
+            GUI.DrawTextureWithTexCoords(rect, gridTex, tileRect);
+
+            tileRect.xMin = xOffset + pointFiveOffset.x;
+            tileRect.yMin = yOffset + pointFiveOffset.y;
+            GUI.DrawTextureWithTexCoords(rect, crossTex, tileRect);
         }
+
+        private readonly Color shadeColor = new Color(0, 0, 0, 0.1f);
+        private readonly Color selectionBoxColor = new Color(1, 1, 1, 0.6f);
 
         internal void DrawSelectionBox() {
             if (currentActivity == NodeActivity.DragGrid) {
@@ -96,7 +105,7 @@ namespace XNodeEditor {
                 Rect r = new Rect(dragBoxStart, size);
                 r.position = GridToWindowPosition(r.position);
                 r.size /= zoom;
-                Handles.DrawSolidRectangleWithOutline(r, new Color(0, 0, 0, 0.1f), new Color(1, 1, 1, 0.6f));
+                Handles.DrawSolidRectangleWithOutline(r, shadeColor, selectionBoxColor);
             }
         }
 
@@ -326,13 +335,17 @@ namespace XNodeEditor {
             Handles.color = originalHandlesColor;
         }
 
+        private readonly List<RerouteReference> rerouteReferenceSelection = new List<RerouteReference>();
+        private readonly List<Vector2> gridPoints = new List<Vector2>(2);
+
         /// <summary> Draws all connections </summary>
         internal void DrawConnections() {
             Vector2 mousePos = Event.current.mousePosition;
-            List<RerouteReference> selection = preBoxSelectionReroute != null ? new List<RerouteReference>(preBoxSelectionReroute) : new List<RerouteReference>();
+            rerouteReferenceSelection.Clear();
+            if (preBoxSelectionReroute != null) {
+                rerouteReferenceSelection.AddRange(preBoxSelectionReroute);
+            }
             hoveredReroute = new RerouteReference();
-
-            List<Vector2> gridPoints = new List<Vector2>(2);
 
             Color col = GUI.color;
             foreach (XNode.Node node in graph.nodes) {
@@ -386,7 +399,7 @@ namespace XNodeEditor {
 
                             GUI.color = portColor;
                             GUI.DrawTexture(rect, portStyle.active.background);
-                            if (rect.Overlaps(selectionBox)) selection.Add(rerouteRef);
+                            if (rect.Overlaps(selectionBox)) rerouteReferenceSelection.Add(rerouteRef);
                             if (rect.Contains(mousePos)) hoveredReroute = rerouteRef;
 
                         }
@@ -394,18 +407,36 @@ namespace XNodeEditor {
                 }
             }
             GUI.color = col;
-            if (Event.current.type != EventType.Layout && currentActivity == NodeActivity.DragGrid) selectedReroutes = selection;
+            if (Event.current.type != EventType.Layout && currentActivity == NodeActivity.DragGrid) {
+                selectedReroutes.Clear();
+                foreach (var rrs in rerouteReferenceSelection) {
+                    selectedReroutes.Add(rrs);
+                };
+            }
         }
+
+        private readonly IDictionary<int, System.Reflection.MethodInfo> onValidateCache = new Dictionary<int, System.Reflection.MethodInfo>();
+        private readonly List<UnityEngine.Object> preSelection = new List<UnityEngine.Object>();
+        private Rect nodeSelectionBoxRect = new Rect();
+        private Rect nodeRect = new Rect();
+        private readonly List<XNode.NodePort> removeEntries = new List<XNode.NodePort>();
 
         internal void DrawNodes() {
             Event e = Event.current;
             if (e.type == EventType.Layout) {
-                selectionCache = new List<UnityEngine.Object>(Selection.objects);
+                selectionCache.Clear();
+                foreach (var o in Selection.objects) {
+                    selectionCache.Add(o);
+                }
             }
 
             System.Reflection.MethodInfo onValidate = null;
             if (Selection.activeObject != null && Selection.activeObject is XNode.Node) {
-                onValidate = Selection.activeObject.GetType().GetMethod("OnValidate");
+                var cacheKey = Selection.activeObject.GetInstanceID();
+                if (!onValidateCache.TryGetValue(cacheKey, out onValidate)) {
+                    onValidate = Selection.activeObject.GetType().GetMethod("OnValidate");
+                    onValidateCache.Add(cacheKey, onValidate);
+                }
                 if (onValidate != null) EditorGUI.BeginChangeCheck();
             }
 
@@ -418,21 +449,23 @@ namespace XNodeEditor {
                 hoveredPort = null;
             }
 
-            List<UnityEngine.Object> preSelection = preBoxSelection != null ? new List<UnityEngine.Object>(preBoxSelection) : new List<UnityEngine.Object>();
+            preSelection.Clear();
+            if (preBoxSelection != null) {
+                preSelection.AddRange(preBoxSelection);
+            }
 
             // Selection box stuff
             Vector2 boxStartPos = GridToWindowPositionNoClipped(dragBoxStart);
             Vector2 boxSize = mousePos - boxStartPos;
             if (boxSize.x < 0) { boxStartPos.x += boxSize.x; boxSize.x = Mathf.Abs(boxSize.x); }
             if (boxSize.y < 0) { boxStartPos.y += boxSize.y; boxSize.y = Mathf.Abs(boxSize.y); }
-            Rect selectionBox = new Rect(boxStartPos, boxSize);
+            nodeSelectionBoxRect.min = boxStartPos;
+            nodeSelectionBoxRect.size = boxSize;
 
             //Save guiColor so we can revert it
             Color guiColor = GUI.color;
 
-            List<XNode.NodePort> removeEntries = new List<XNode.NodePort>();
-
-            if (e.type == EventType.Layout) culledNodes = new List<XNode.Node>();
+            if (e.type == EventType.Layout) culledNodes.Clear();
             for (int n = 0; n < graph.nodes.Count; n++) {
                 // Skip null nodes. The user could be in the process of renaming scripts, so removing them at this point is not advisable.
                 if (graph.nodes[n] == null) continue;
@@ -451,8 +484,10 @@ namespace XNodeEditor {
                 if (e.type == EventType.Repaint) {
                     removeEntries.Clear();
                     foreach (var kvp in _portConnectionPoints)
-                        if (kvp.Key.node == node) removeEntries.Add(kvp.Key);
-                    foreach (var k in removeEntries) _portConnectionPoints.Remove(k);
+                        if (kvp.Key.node == node)
+                            removeEntries.Add(kvp.Key);
+                    foreach (var k in removeEntries)
+                        _portConnectionPoints.Remove(k);
                 }
 
                 NodeEditor nodeEditor = NodeEditor.GetEditor(node, this);
@@ -509,8 +544,12 @@ namespace XNodeEditor {
                     foreach (var kvp in NodeEditor.portPositions) {
                         Vector2 portHandlePos = kvp.Value;
                         portHandlePos += node.position;
-                        Rect rect = new Rect(portHandlePos.x - 8, portHandlePos.y - 8, 16, 16);
-                        portConnectionPoints[kvp.Key] = rect;
+                        if (!portConnectionPoints.TryGetValue(kvp.Key, out var portHandleRect)) {
+                            portConnectionPoints[kvp.Key] = new Rect(portHandlePos.x - 8, portHandlePos.y - 8, 16, 16);
+                        } else {
+                            portHandleRect.xMin = portHandlePos.x - 8;
+                            portHandleRect.yMin = portHandlePos.y - 8;
+                        }
                     }
                 }
 
@@ -519,12 +558,13 @@ namespace XNodeEditor {
                 if (e.type != EventType.Layout) {
                     //Check if we are hovering this node
                     Vector2 nodeSize = GUILayoutUtility.GetLastRect().size;
-                    Rect windowRect = new Rect(nodePos, nodeSize);
-                    if (windowRect.Contains(mousePos)) hoveredNode = node;
+                    nodeRect.min = nodePos;
+                    nodeRect.size = nodeSize;
+                    if (nodeRect.Contains(mousePos)) hoveredNode = node;
 
                     //If dragging a selection box, add nodes inside to selection
                     if (currentActivity == NodeActivity.DragGrid) {
-                        if (windowRect.Overlaps(selectionBox)) preSelection.Add(node);
+                        if (nodeRect.Overlaps(nodeSelectionBoxRect)) preSelection.Add(node);
                     }
 
                     //Check if we are hovering any of this nodes ports
@@ -569,6 +609,9 @@ namespace XNodeEditor {
             return false;
         }
 
+        private readonly GUIContent tooltipContent = new GUIContent();
+        private Rect tooltipRect = new Rect();
+
         internal void DrawTooltip() {
             if (!NodeEditorPreferences.GetSettings().portTooltips || graphEditor == null)
                 return;
@@ -579,11 +622,12 @@ namespace XNodeEditor {
                 tooltip = NodeEditor.GetEditor(hoveredNode, this).GetHeaderTooltip();
             }
             if (string.IsNullOrEmpty(tooltip)) return;
-            GUIContent content = new GUIContent(tooltip);
-            Vector2 size = NodeEditorResources.styles.tooltip.CalcSize(content);
+            tooltipContent.text = tooltip;
+            Vector2 size = NodeEditorResources.styles.tooltip.CalcSize(tooltipContent);
             size.x += 8;
-            Rect rect = new Rect(Event.current.mousePosition - (size), size);
-            EditorGUI.LabelField(rect, content, NodeEditorResources.styles.tooltip);
+            tooltipRect.min = Event.current.mousePosition - (size);
+            tooltipRect.size = size;
+            EditorGUI.LabelField(tooltipRect, tooltipContent, NodeEditorResources.styles.tooltip);
             Repaint();
         }
     }
