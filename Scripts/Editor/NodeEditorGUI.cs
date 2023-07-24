@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
+using static UnityEditor.EditorGUI;
 using XNodeEditor.Internal;
 #if UNITY_2019_1_OR_NEWER && USE_ADVANCED_GENERIC_MENU
 using GenericMenu = XNodeEditor.AdvancedGenericMenu;
@@ -19,6 +20,8 @@ namespace XNodeEditor {
         /// <summary> Executed after all other window GUI. Useful if Zoom is ruining your day. Automatically resets after being run.</summary>
         public event Action onLateGUI;
         private static readonly Vector3[] polyLineTempArray = new Vector3[2];
+
+        public Rect overlayRect;
 
         protected virtual void OnGUI() {
             Event e = Event.current;
@@ -472,6 +475,20 @@ namespace XNodeEditor {
                 if (n >= graph.nodes.Count) return;
                 XNode.Node node = graph.nodes[n];
 
+                //Get node position
+                Vector2 nodePos = GridToWindowPositionNoClipped(node.position);
+
+                var ignore = false;
+                if (overlayRect != null && nodeSizes.ContainsKey(node)) {
+                    Vector2 size = nodeSizes[node];
+                    Rect zoomedNodeRect = new Rect(nodePos, size);
+                    zoomedNodeRect.min /= _zoom;
+                    zoomedNodeRect.max /= _zoom;
+                    if (overlayRect.Overlaps(zoomedNodeRect)) {
+                        ignore = true;
+                    }
+                }
+
                 // Culling
                 if (e.type == EventType.Layout) {
                     // Cull unselected nodes outside view
@@ -497,9 +514,6 @@ namespace XNodeEditor {
                 // Set default label width. This is potentially overridden in OnBodyGUI
                 EditorGUIUtility.labelWidth = 84;
 
-                //Get node position
-                Vector2 nodePos = GridToWindowPositionNoClipped(node.position);
-
                 GUILayout.BeginArea(new Rect(nodePos, new Vector2(nodeEditor.GetWidth(), 4000)));
 
                 bool selected = selectionCache.Contains(graph.nodes[n]);
@@ -522,9 +536,17 @@ namespace XNodeEditor {
                 GUI.color = guiColor;
                 EditorGUI.BeginChangeCheck();
 
-                //Draw node contents
-                nodeEditor.OnHeaderGUI();
-                nodeEditor.OnBodyGUI();
+                if (ignore) {
+                    using (var disabledScope = new DisabledGroupScope(true)) {
+                        //Draw node contents
+                        nodeEditor.OnHeaderGUI();
+                        nodeEditor.OnBodyGUI();
+                    }
+                } else {
+                    //Draw node contents
+                    nodeEditor.OnHeaderGUI();
+                    nodeEditor.OnBodyGUI();
+                }
 
                 //If user changed a value, notify other scripts through onUpdateNode
                 if (EditorGUI.EndChangeCheck()) {
