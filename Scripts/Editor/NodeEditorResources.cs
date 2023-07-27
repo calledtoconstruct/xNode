@@ -50,7 +50,7 @@ namespace XNodeEditor {
                 nodeHighlight.normal.background = NodeEditorResources.nodeHighlight;
                 nodeHighlight.border = new RectOffset(32, 32, 32, 32);
 
-                tooltip = new GUIStyle("helpBox");
+                tooltip = new GUIStyle(GUI.skin.button);
                 tooltip.alignment = TextAnchor.MiddleCenter;
             }
         }
